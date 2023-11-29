@@ -88,11 +88,11 @@ class Delete_Duplicate_Meta_Command {
 				WP_CLI::confirm( 'Are you sure you want to delete the duplicate meta fields?' );
 				WP_CLI::log( 'Deleting duplicate meta fields...' );
 				$this->delete_duplicated_meta( $this->post_id );
-				WP_CLI::success( 'Duplicate meta fields have been deleted.' );
 			}
 
 			if ( $this->export ) {
-				$this->export_to_csv( $duplicated_meta, 'count' );
+				$remaining_duplicated_meta = $this->get_duplicated_meta_keys( $this->post_id );
+				$this->export_to_csv( $remaining_duplicated_meta, 'keys' );
 
 				if ( 'values' === $this->export ) {
 					$duplicated_values = $this->get_duplicate_values( $this->post_id );
@@ -110,35 +110,23 @@ class Delete_Duplicate_Meta_Command {
 	 */
 	private function get_duplicated_meta_keys( $post_id = 0 ) {
 		global $wpdb;
-		$where = isset( $post_id ) && 0 !== $post_id ? $wpdb->prepare( 'WHERE post_id = %d', $post_id ) : '';
 
-		$duplicated_meta = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT post_id, meta_key, COUNT(*)
+		$where = isset( $post_id ) && 0 !== $post_id ? 'post_id = ' . (int) $post_id . ' AND ' : '';
+		$query =
+			"SELECT post_id, meta_key, COUNT(*) AS duplicate_count
+			FROM $wpdb->postmeta
+			WHERE $where (post_id, meta_key) IN (
+				SELECT post_id, meta_key
 				FROM $wpdb->postmeta
-				$where 
 				GROUP BY post_id, meta_key
-				HAVING COUNT(*) > 1"
+				HAVING COUNT(*) > 1
 			)
-		);
+			GROUP BY post_id, meta_key
+			ORDER BY post_id, meta_key, duplicate_count DESC;";
 
-		$posts_with_duplicate_meta = array_reduce(
-			$duplicated_meta,
-			function( $result, $entry ) {
-				$p_id = $entry->post_id;
-				// Create a new array key if it doesn't exist
-				if ( ! isset( $result[ $p_id ] ) ) {
-					$result[ $p_id ] = array();
-				}
-				// Add the entry to the grouped array
-				$result[ $p_id ][] = $entry;
+		$duplicated_meta = $wpdb->get_results( $query ); // phpcs:ignore
 
-				return $result;
-			},
-			array()
-		);
-
-		return $posts_with_duplicate_meta;
+		return $duplicated_meta;
 	}
 
 	/**
@@ -149,44 +137,20 @@ class Delete_Duplicate_Meta_Command {
 	 */
 	private function get_duplicate_values( $post_id = 0 ) {
 		global $wpdb;
-		$where = isset( $post_id ) && 0 !== $post_id ? $wpdb->prepare( 'WHERE pm1.post_id = %d', $post_id ) : '';
-
-		$duplicated_meta = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT
-				pm1.post_id,
-				pm1.meta_key,
-				pm1.meta_value
-			FROM
-				wp_postmeta pm1
-			JOIN
-				wp_postmeta pm2 ON (
-					pm1.post_id = pm2.post_id
-					AND pm1.meta_key = pm2.meta_key
-					AND pm1.meta_id <> pm2.meta_id
-				)
-			$where
-			ORDER BY
-				pm1.post_id, pm1.meta_key"
+		$where = isset( $post_id ) && 0 !== $post_id ? 'post_id = ' . (int) $post_id . ' AND ' : '';
+		$query =
+		"SELECT meta_id, post_id, meta_key, meta_value
+			FROM wp_postmeta
+			WHERE $where (post_id, meta_key) IN (
+				SELECT post_id, meta_key
+				FROM wp_postmeta
+				GROUP BY post_id, meta_key
+				HAVING COUNT(*) > 1
 			)
-		);
+			ORDER BY post_id, meta_key, meta_id";
 
-		$posts_with_duplicate_values = array_reduce(
-			$duplicated_meta,
-			function( $result, $entry ) {
-				$p_id = $entry->post_id;
-				// Create a new array key if it doesn't exist
-				if ( ! isset( $result[ $p_id ] ) ) {
-					$result[ $p_id ] = array();
-				}
-				// Add the entry to the grouped array
-				$result[ $p_id ][] = $entry;
-
-				return $result;
-			},
-			array()
-		);
-		return $posts_with_duplicate_values;
+		$duplicated_meta = $wpdb->get_results( $query ); // phpcs:ignore
+		return $duplicated_meta;
 	}
 
 	/**
@@ -197,29 +161,58 @@ class Delete_Duplicate_Meta_Command {
 	private function delete_duplicated_meta( $post_id = 0 ) {
 		global $wpdb;
 		$and_post_id = isset( $post_id ) && 0 !== $post_id ? $wpdb->prepare( 'AND p1.post_id = %d;', $post_id ) : '';
-		$wpdb->query(
+		$result      = $wpdb->query(
 			"DELETE p1
 			FROM $wpdb->postmeta p1
 			JOIN $wpdb->postmeta p2 ON (p1.post_id = p2.post_id AND p1.meta_key = p2.meta_key AND p1.meta_value = p2.meta_value)
 			WHERE p1.meta_id > p2.meta_id $and_post_id",
 			$post_id
 		);
+
+		$this->log_query_result( $result, 'Duplicate meta fields have been deleted', 'success', true );
 	}
 
+	/**
+	 * Log query result.
+	 *
+	 * @param mixed  $result           Query result.
+	 * @param string $success_message  Success message.
+	 * @param bool   $show_count       Show count.
+	 */
+	private function log_query_result( $result, $success_message = 'Query successfull', $log_type = 'log', $show_count = false ) {
+		global $wpdb;
+		if ( false === $result ) {
+			// Query failed
+			$wpdb_error = $wpdb->last_error;
+			WP_CLI::error( $wpdb_error );
+		} else {
+			$count_msg = '';
+			if ( $show_count ) {
+				$deleted_entries_count = $wpdb->rows_affected;
+				$count_msg             = " ($deleted_entries_count entries affected).";
+			}
+			$method = "WP_CLI::$log_type";
+			$method( $success_message . $count_msg );
+		}
+	}
 	/**
 	 * Export to CSV.
 	 *
 	 * @param array  $duplicated_meta Duplicated meta.
 	 * @param string $type Type.
 	 */
-	private function export_to_csv( $duplicated_meta, $type = 'count' ) {
+	private function export_to_csv( $duplicated_meta, $type = 'keys' ) {
 		global $wp_filesystem;
 		if ( empty( $wp_filesystem ) ) {
 			require_once ABSPATH . '/wp-admin/includes/file.php';
 			WP_Filesystem();
 		}
 
-		$type      = 'count' === $type ? 'COUNT(*)' : 'meta_value';
+		$header_fields = array( 'post_id', 'meta_key', 'duplicate_keys_count' );
+		if ( 'values' === $type ) {
+			$header_fields = array( 'meta_id', 'post_id', 'meta_key', 'meta_value' );
+		}
+
 		$filename  = 'duplicate_meta_' . $type . '__' . gmdate( 'Y_m_d_H_i_s' ) . '.csv';
 		$file_path = trailingslashit( wp_upload_dir()['basedir'] ) . 'export/' . $filename;
 		$wp_filesystem->mkdir( trailingslashit( wp_upload_dir()['basedir'] ) . 'export/' );
@@ -227,27 +220,15 @@ class Delete_Duplicate_Meta_Command {
 		$csv_handle = fopen( $file_path, 'w' ); // phpcs:ignore
 
 		if ( $csv_handle ) {
-			fputcsv( $csv_handle, array( 'post_id', 'meta_key', $type ) );
+			fputcsv( $csv_handle, $header_fields );
 
-			foreach ( $duplicated_meta as $post_id => $entries ) {
-				foreach ( $entries as $entry ) {
-					$data = array(
-						$entry->post_id,
-						$entry->meta_key,
-						$entry->{$type},
-					);
-
-					fputcsv( $csv_handle, $data );
-				}
+			foreach ( $duplicated_meta as $entry ) {
+				fputcsv( $csv_handle, (array) $entry );
 			}
 			fclose( $csv_handle ); // phpcs:ignore
 		}
 
-		if ( 'meta_value' === $type ) {
-			WP_CLI::success( "All the duplicate meta values have been written to $file_path" );
-		} else {
-			WP_CLI::success( "All the duplicate meta keys have been written to $file_path" );
-		}
+		WP_CLI::success( "All the duplicate meta $type have been written to $file_path" );
 	}
 }
 
