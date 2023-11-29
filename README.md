@@ -5,8 +5,8 @@ A custom WP-CLI command to delete/export duplicate post meta fields.
 - `[--dry-run]` - If set, no duplicate meta fields will be deleted.
 - `[--post_id=<post_id>]` - If set, only the duplicate meta fields for the given post will be checked.
 - `[--export=<export>]` - If set, the duplicate meta fields will be exported to a CSV file. Options:
-    - `[none]` or `count` (default): Exports the count of duplicate meta fields.
-    - `values`: Exports the duplicate meta values with their values.
+    - `[none]` or `keys` (default): Exports a CSV file with a list of the posts with duplicate meta_keys including their post_id and the number of duplicate keys (count).
+    - `values`: Exports a CSV file with the keys (previous case) and another one with the values of the duplicated meta_keys.
 
 # Notes
 - If `--dry-run` isn't used, all the postmeta entries with the same `post_id`, `meta_value` **and** `meta_key` will be deleted.
