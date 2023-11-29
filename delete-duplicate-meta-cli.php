@@ -30,16 +30,17 @@ class Delete_Duplicate_Meta_Command {
 	 * : If set, the duplicate meta fields will be exported to a CSV file.
 	 * ---
 	 * options:
-	 *   - [none] or true (default): Exports the count of duplicate meta fields.
-	 *   - values: Exports the duplicate meta values with their values.
+	 *   - count
+	 *   - values
 	 * ---
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp post delete-duplicate-meta --dry-run
-	 *     wp post delete-duplicate-meta --export=values --dry-run
-	 *     wp post delete-duplicate-meta --post_id=123 --export
-	 *     wp post delete-duplicate-meta --post_id=123 --export=values
+	 *     wp delete-duplicate-meta
+	 *     wp delete-duplicate-meta --dry-run
+	 *     wp delete-duplicate-meta --post_id=123
+	 *     wp delete-duplicate-meta --export=count
+	 *     wp delete-duplicate-meta --export=values
 	 *
 	 * @param array $args       Arguments.
 	 * @param array $assoc_args Associative arguments.
@@ -50,13 +51,13 @@ class Delete_Duplicate_Meta_Command {
 			array(
 				'dry-run' => true,
 				'post_id' => 0,
-				'export'  => false,
+				'export'  => 'count',
 			)
 		);
 
 		$this->post_id = (int) $assoc_args['post_id'];
 		$this->export  = $assoc_args['export'];
-		$this->dry_run = (bool) $assoc_args['dry_run'];
+		$this->dry_run = (bool) $assoc_args['dry-run'];
 
 		WP_CLI::log( '' );
 		WP_CLI::log( '------ DELETING DUPLICATE POST META ------' );
@@ -252,4 +253,4 @@ class Delete_Duplicate_Meta_Command {
 
 $instance = new Delete_Duplicate_Meta_Command();
 
-WP_CLI::add_command( 'post', $instance );
+WP_CLI::add_command( 'delete-duplicate-meta', $instance );
