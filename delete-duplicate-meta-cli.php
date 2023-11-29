@@ -49,7 +49,7 @@ class Delete_Duplicate_Meta_Command {
 		$assoc_args = wp_parse_args(
 			$assoc_args,
 			array(
-				'dry-run' => true,
+				'dry-run' => false,
 				'post_id' => 0,
 				'export'  => 'count',
 			)
