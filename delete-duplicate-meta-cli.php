@@ -10,9 +10,10 @@ class Delete_Duplicate_Meta_Command {
 	protected $environment;
 
 	public function __construct() {
-		$this->post_id = 0;
-		$this->export  = false;
-		$this->dry_run = false;
+		$this->post_id  = 0;
+		$this->export   = false;
+		$this->dry_run  = false;
+		$this->meta_key = '';
 	}
 
 	/**
@@ -28,19 +29,15 @@ class Delete_Duplicate_Meta_Command {
 	 *
 	 * [--export=<export>]
 	 * : If set, the duplicate meta fields will be exported to a CSV file.
-	 * ---
-	 * options:
-	 *   - count
-	 *   - values
-	 * ---
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp delete-duplicate-meta
 	 *     wp delete-duplicate-meta --dry-run
 	 *     wp delete-duplicate-meta --post_id=123
-	 *     wp delete-duplicate-meta --export=count
+	 *     wp delete-duplicate-meta --export=keys
 	 *     wp delete-duplicate-meta --export=values
+	 *     wp delete-duplicate-meta --export=different_values[meta_key_name]
 	 *
 	 * @param array $args       Arguments.
 	 * @param array $assoc_args Associative arguments.
@@ -91,12 +88,24 @@ class Delete_Duplicate_Meta_Command {
 			}
 
 			if ( $this->export ) {
-				$remaining_duplicated_meta = $this->get_duplicated_meta_keys( $this->post_id );
-				$this->export_to_csv( $remaining_duplicated_meta, 'keys' );
+
+				if ( 'keys' === $this->export ) {
+					$remaining_duplicated_meta = $this->get_duplicated_meta_keys( $this->post_id );
+					$this->export_to_csv( $remaining_duplicated_meta, 'keys' );
+				}
 
 				if ( 'values' === $this->export ) {
 					$duplicated_values = $this->get_duplicate_values( $this->post_id );
 					$this->export_to_csv( $duplicated_values, 'values' );
+				}
+
+				// Export different values for the same meta key.
+				if ( false !== strpos( $this->export, 'different_values' ) ) {
+					$meta_key         = str_replace( 'different_values[', '', $this->export );
+					$meta_key         = str_replace( ']', '', $meta_key );
+					$this->meta_key   = $meta_key;
+					$different_values = $this->get_different_values_same_meta_key( $meta_key );
+					$this->export_to_csv( $different_values, 'different_values' );
 				}
 			}
 		}
@@ -154,6 +163,29 @@ class Delete_Duplicate_Meta_Command {
 	}
 
 	/**
+	 * Get a list of posts with different values for the same meta key.
+	 *
+	 * @param string $meta_key Meta key.
+	 * @return array
+	 */
+	private function get_different_values_same_meta_key( $meta_key ) {
+		global $wpdb;
+		$query =
+		"SELECT meta_id, post_id, meta_key, meta_value
+			FROM $wpdb->postmeta
+			WHERE meta_key = '$meta_key'
+			AND post_id IN (
+				SELECT post_id
+				FROM $wpdb->postmeta
+				WHERE meta_key = '$meta_key'
+				GROUP BY post_id
+				HAVING COUNT(*) > 1
+			)";
+
+		$different_meta = $wpdb->get_results( $query ); // phpcs:ignore
+		return $different_meta;
+	}
+	/**
 	 * Delete duplicated meta.
 	 *
 	 * @param int $post_id Post ID.
@@ -208,9 +240,16 @@ class Delete_Duplicate_Meta_Command {
 			WP_Filesystem();
 		}
 
-		$header_fields = array( 'post_id', 'meta_key', 'duplicate_keys_count' );
-		if ( 'values' === $type ) {
+		$success_message = "All the duplicate meta $type have been written to ";
+		$header_fields   = array( 'post_id', 'meta_key', 'duplicate_keys_count' );
+
+		if ( 'values' === $type || false !== strpos( $this->export, 'different_values' ) ) {
 			$header_fields = array( 'meta_id', 'post_id', 'meta_key', 'meta_value' );
+		}
+
+		if ( false !== strpos( $this->export, 'different_values' ) ) {
+			$type            = 'different_values_' . $this->meta_key;
+			$success_message = "All the different values for the meta $type have been written to ";
 		}
 
 		$filename  = 'duplicate_meta_' . $type . '__' . gmdate( 'Y_m_d_H_i_s' ) . '.csv';
@@ -228,7 +267,7 @@ class Delete_Duplicate_Meta_Command {
 			fclose( $csv_handle ); // phpcs:ignore
 		}
 
-		WP_CLI::success( "All the duplicate meta $type have been written to $file_path" );
+		WP_CLI::success( $success_message . $file_path );
 	}
 }
 
