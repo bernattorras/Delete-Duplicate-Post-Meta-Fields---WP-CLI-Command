@@ -6,7 +6,8 @@ A custom WP-CLI command to delete/export duplicate post meta fields.
 - `[--post_id=<post_id>]` - If set, only the duplicate meta fields for the given post will be checked.
 - `[--export=<export>]` - If set, the duplicate meta fields will be exported to a CSV file. Options:
     - `[none]` or `keys` (default): Exports a CSV file with a list of the posts with duplicate meta_keys including their post_id and the number of duplicate keys (count).
-    - `values`: Exports a CSV file with the keys (previous case) and another one with the values of the duplicated meta_keys.
+    - `values`: Exports a CSV file with the values of the duplicated meta_keys.
+    - `'meta_key[meta_key_name]'`: Exports a CSV file with all the posts and values of a specific meta key.
 
 # Notes
 - If `--dry-run` isn't used, all the postmeta entries with the same `post_id`, `meta_value` **and** `meta_key` will be deleted.
@@ -28,9 +29,11 @@ Deletes the duplicate meta keys of the post 123 and exports a list of the duplic
 
 - `wp delete-duplicate-meta --export=values`
 
-Deletes the duplicate meta keys of all the posts and exports:
-- A list of the duplicate keys with a count of duplicate values
-- A list of duplicated keys with their values.
+Deletes the duplicate meta keys of all the posts and exports a list of duplicated keys with their values.
+
+- `wp delete-duplicate-meta --dry-run --export='meta_key[example_meta]'`
+
+  Exports all the posts with the `example_meta` meta key with their values.
 
 # Use Case
 Let's say we have a database that due to a faulty import has multiple postmeta entries with the same meta_key and meta_values for the same posts. In this case we can:
@@ -84,8 +87,22 @@ _Now there are only 2 remaining duplicates of the `example_meta_key` for the pos
 |------------|-----------------------|-------------|---------------|
 |   36       | example_meta_key      | 1           | value 1       |
 |   36       | example_meta_key      | 2           | value 2       |
+|   54       | a_different_meta_key  | 1           | value 1       |
+|   54       | a_different_meta_key  | 1           | value 2       |
+| ...        | ...                   | ...         | ...           |
+```
+_This CSV only includes the post's repeated meta_keys, which have now different (unique) meta_values. These entries should be reviewed manually to determine which ones need to be deleted (if they aren't needed)._
+
+4. Run `wp delete-duplicate-meta --dry-run --export='meta_key[example_meta_key]'` to get a list of all the entries with the `example_meta_key` and their different values.
+
+**Example of the exported `meta_key_example_meta_key` file:**
+```
+|   meta_id  |   post_id             |   meta_key  |   meta_value  |
+|------------|-----------------------|-------------|---------------|
+|   36       | example_meta_key      | 1           | value 1       |
+|   36       | example_meta_key      | 2           | value 2       |
 |   54       | example_meta_key      | 1           | value 1       |
 |   54       | example_meta_key      | 1           | value 2       |
 | ...        | ...                   | ...         | ...           |
 ```
-_This CSV only includes the post's repeated meta_keys, which have now different (unique) meta_values. These entries should be reviewed manually to determine which ones need to be deleted (if they aren't needed)._
+_This CSV file contains all the values of the example_meta_key, which are all different now. It's specially useful to review these specific values manually_
