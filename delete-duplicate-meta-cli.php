@@ -271,6 +271,7 @@ class Delete_Duplicate_Meta_Command {
 	}
 }
 
-$instance = new Delete_Duplicate_Meta_Command();
-
-WP_CLI::add_command( 'delete-duplicate-meta', $instance );
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	$instance = new Delete_Duplicate_Meta_Command();
+	WP_CLI::add_command( 'delete-duplicate-meta', $instance );
+}
