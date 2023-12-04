@@ -5,7 +5,7 @@ A custom WP-CLI command to delete/export duplicate post meta fields.
 - `[--dry-run]` - If set, no duplicate meta fields will be deleted.
 - `[--post_id=<post_id>]` - If set, only the duplicate meta fields for the given post will be checked.
 - `[--export=<export>]` - If set, the duplicate meta fields will be exported to a CSV file. Options:
-    - `[none]` or `keys` (default): Exports a CSV file with a list of the posts with duplicate meta_keys including their post_id and the number of duplicate keys (count).
+    - `keys`: Exports a CSV file with a list of the posts with duplicate meta_keys including their post_id and the number of duplicate keys (count).
     - `values`: Exports a CSV file with the values of the duplicated meta_keys.
     - `'meta_key[meta_key_name]'`: Exports a CSV file with all the posts and values of a specific meta key.
 
@@ -23,7 +23,7 @@ Checks how many duplicate post meta keys exist in the database.
 
 Exports a list of the duplicate post meta keys with their values.
 
-- `wp delete-duplicate-meta --post_id=123 --export`
+- `wp delete-duplicate-meta --post_id=123 --export=keys`
 
 Deletes the duplicate meta keys of the post 123 and exports a list of the duplicate keys with a count of duplicate values.
 
@@ -38,7 +38,7 @@ Deletes the duplicate meta keys of all the posts and exports a list of duplicate
 # Use Case
 Let's say we have a database that due to a faulty import has multiple postmeta entries with the same meta_key and meta_values for the same posts. In this case we can:
 
-1. Run `wp delete-duplicate-meta --dry-run  --export` to export a list of all the meta_keys duplicated for each post
+1. Run `wp delete-duplicate-meta --dry-run  --export=keys` to export a list of all the meta_keys duplicated for each post
 
 **Example of the exported `duplicate_meta_keys` file:**
 ```
